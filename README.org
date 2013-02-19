@@ -1,0 +1,50 @@
+* About
+  CL-NETSTRING+ is a library for working with a modified form of
+  [[http://cr.yp.to/proto/netstrings.txt][netstrings]].
+
+* Netstring+ Format
+  The Netstring+ format is identical to the [[http://cr.yp.to/proto/netstrings.txt][netstring]] format except
+  for two details:
+  1. The header is written in (printed) hexadecimal instead of
+     decimal, and UTF-8 encoding is specified for non-data portions.
+  2. The terminating character is =\n= (linefeed) instead of =,=.
+
+  These two changes were made for readability and portability
+  reasons. Separating messages with a linefeed is easier to read with
+  long messages than a comma (particularly if commas may appear in the
+  message). A hexadecimal header aligns well when the size of messages
+  must be stored in a fixed-size type: determining whether a message
+  length is too long is a matter of counting digits, rather than
+  converting bases.
+
+* API
+  : (defun write-netstring-bytes (stream data))
+  Netstring+-encode a byte-vector =data= and write it to
+  =stream=. =stream= must be a byte-stream.
+
+  : (defun read-netstring-data (stream))
+  Return a byte-vector of Netstring+-decoded data from
+  =stream=. =stream= must be a byte-stream.
+
+  : (defun netstring-bytes (data))
+  Return a byte-vector of the Netstring+-encoded =data=.
+
+  : (defun netstring-data (bytes))
+  Return the byte-vector encoded in the Netstring+ =bytes=.
+
+  : (defmacro data (sequence))
+  This macro is used to precompute static Netstring+ data at
+  macroexpansion-time. =sequence= is a byte-vector of data to be
+  encoded.
+
+  : (defmacro str (string))
+  Like =data=, this macro precomputes a static Netstring+ at
+  macroexpansion-time, except that =string= will be UTF-8 encoded
+  before the Netstring+ is produced.
+
+
+
+* TODO
+  - Document conditions that may be signalled.
+  - Consider using fast-io for some of the byte-vector stuff.
+  - Add a resynchronizing restart when there is a read error.
