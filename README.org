@@ -7,7 +7,7 @@
   for two details:
   1. The header is written in (printed) hexadecimal instead of
      decimal, and UTF-8 encoding is specified for non-data portions.
-  2. The terminating character is =\n= (linefeed) instead of =,=.
+  2. The terminating character is =\n= (linefeed) instead of a comma.
 
   These two changes were made for readability and portability
   reasons. Separating messages with a linefeed is easier to read with
@@ -44,7 +44,7 @@
 
 
 
-* TODO
+* Future TODOs
   - Document conditions that may be signalled.
   - Consider using fast-io for some of the byte-vector stuff.
   - Add a resynchronizing restart when there is a read error.
