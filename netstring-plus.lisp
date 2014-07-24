@@ -20,7 +20,7 @@
 
 (define-condition too-much-data (netstring-parse-error)
   ((expected-size :initarg :expected-size :reader expected-size)
-   (found-char :initarg :found :reader :found-char))
+   (found-char :initarg :found :reader found-char))
   (:documentation "Condition representing a missing terminator after the data bytes.")
   (:report (lambda (condition stream)
              (format stream "Expected linefeed terminator after ~A bytes, got ~S."
