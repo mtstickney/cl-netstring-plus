@@ -34,7 +34,7 @@
        do (write-byte e stream))
     (write-char #\Linefeed stream)))
 
-(defun is-hex-digit (c)
+(defun hex-digit-p (c)
   (parse-integer (string c) :radix 16 :junk-allowed t))
 
 ;; TODO: this relies on =stream= having :external-format :utf-8
@@ -44,7 +44,7 @@
          (header-str
           (with-output-to-string
             (header-stream)
-            (loop while (is-hex-digit (setf c (read-char stream)))
+            (loop while (hex-digit-p (setf c (read-char stream)))
                do (write-char c header-stream)
                finally (unread-char c stream))))
          (len (parse-integer header-str :radix 16))
