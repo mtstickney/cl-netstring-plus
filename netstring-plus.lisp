@@ -34,8 +34,103 @@
        do (write-byte e stream))
     (write-char #\Linefeed stream)))
 
+;;; Decoding
+
 (defun hex-digit-p (c)
   (parse-integer (string c) :radix 16 :junk-allowed t))
+
+(defclass decoder-state ()
+  ((state :initarg :state :accessor state)
+   (data-size :initarg :size :accessor size)
+   (message-data :initarg :data :accessor msg-data))
+  (:default-initargs
+   :state :initial
+    :size 0
+    :data nil))
+
+(defun add-header-digit! (state n)
+  (check-type state decoder-state)
+  (check-type n (integer 0 15))
+  (setf (size state)
+        (+ (* (size state) 16)
+           n)))
+
+(defun add-data-byte! (state byte)
+  (check-type state decoder-state)
+  (check-type byte (unsigned-byte 8))
+  (unless (msg-data state)
+    (setf (msg-data state)
+          (make-array (size state)
+                      :element-type '(unsigned-byte 8)
+                      :fill-pointer 0)))
+  (vector-push byte (msg-data state)))
+
+(defun transition-state! (state to-state)
+  (check-type state decoder-state)
+  (check-type to-state keyword)
+  (flet ((assert-coming-from (state curstates)
+           (unless (member (state state) curstates)
+             (error "Transition from decoder state ~S to state ~S is not permissible."
+                    (state state)
+                    to-state))))
+    (ecase to-state
+      (:initial (error "Trying to transition to initial decoder state from state ~S"
+                      (state state)))
+      (:header (assert-coming-from state '(:initial)))
+      (:data (assert-coming-from state '(:header)))
+      (:end-of-data (assert-coming-from state '(:data :header)))
+      (:complete (assert-coming-from state '(:end-of-data))))
+    ;; If we haven't errored out by now, update the state
+    (setf (state state) to-state)))
+
+(defun make-decoder-state (&rest args &key state size data)
+  (declare (ignore state size data))
+  (apply #'make-instance 'decoder-state args))
+
+(defun pump-element (stream state)
+  (check-type state decoder-state)
+  (ecase (state state)
+    ((:header :initial)
+     (let* ((c (read-char stream))
+            (n (hex-digit-p c)))
+       (cond
+         ((eql c #\:) (cond
+                        ;; If we've read an acceptable character,
+                        ;; we'll have transitioned to :header.
+                        ((eql (state state) :initial)
+                         (error 'empty-header))
+                        ((= (size state) 0)
+                         (transition-state! state :end-of-data))
+                        (t (transition-state! state :data))))
+         ((null n) (error 'invalid-header-character :char c))
+         (t (add-header-digit! state n)
+            (when (eql (state state) :initial)
+              (transition-state! state :header))))))
+    (:data
+     (let ((byte (read-byte stream)))
+       (add-data-byte! state byte)
+       (when (= (length (msg-data state)) (size state))
+         (transition-state! state :end-of-data))))
+    (:end-of-data
+     (let ((c (read-char stream)))
+       (unless (eql c #\Linefeed)
+         (unread-char c stream)
+         (error 'too-much-data :expected-size (size state) :found c))
+       (transition-state! state :complete)))
+    (:complete (error "Decoder ~S is complete, can't pump any more data." state))))
+
+(defun pump-data (stream state)
+  (let ((msgs '()))
+    (handler-case
+        (loop
+           (loop until (eql (state state) :complete)
+              do (pump-element stream state)
+              finally (push (msg-data state) msgs))
+           (setf state (make-decoder-state)))
+      (end-of-file ()
+        ;; Just trap it
+        ))
+    (values state (nreverse msgs))))
 
 ;; TODO: this relies on =stream= having :external-format :utf-8
 ;; currently done in read-netstring-data, but eh....
