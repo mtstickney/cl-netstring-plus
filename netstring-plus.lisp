@@ -83,7 +83,10 @@
   (let* ((len (length sequence))
          (hex-header (trivial-utf-8:string-to-utf-8-bytes
                       (format nil "~X:" len))))
-    (concatenate '(vector (unsigned-byte 8)) hex-header sequence)))
+    (concatenate '(vector (unsigned-byte 8))
+                 hex-header
+                 sequence
+                 (trivial-utf-8:string-to-utf-8-bytes (format nil "~c" #\Linefeed)))))
 
 (defmacro str (string)
   `(data ,(trivial-utf-8:string-to-utf-8-bytes string)))
