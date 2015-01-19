@@ -28,7 +28,7 @@
                      (found-char condition)))))
 
 (defun write-netstring-bytes (stream data)
-  (let ((stream (flexi-streams:make-flexi-stream stream :external-format :utf-8)))
+  (let ((stream (flexi-streams:make-flexi-stream stream :external-format '(:utf-8 :eol-style :lf))))
     (format stream "~X:" (length data))
     (loop for e across data
        do (write-byte e stream))
@@ -154,7 +154,7 @@
 ;;; TODO: Add support for a resynchronizing restart to dump data until
 ;;; newline on error
 (defun read-netstring-data (stream)
-  (let* ((fstream (flexi-streams:make-flexi-stream stream :external-format :utf-8))
+  (let* ((fstream (flexi-streams:make-flexi-stream stream :external-format '(:utf-8 :eol-style :lf)))
          (len (read-hex-header fstream))
          (seq (make-array len :element-type '(unsigned-byte 8)
                           :fill-pointer 0))
