@@ -2,6 +2,7 @@
 
 (defpackage #:cl-netstring+
   (:use #:cl)
+  (:nicknames #:nsp)
   (:export #:write-netstring-bytes
            #:make-decoder-state
            #:pump-data
