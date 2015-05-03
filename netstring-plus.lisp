@@ -87,6 +87,14 @@
   (declare (ignore state size data))
   (apply #'make-instance 'decoder-state args))
 
+(defun next-read-size (state)
+  "Return the size of the next chunk of data that STATE expects as an efficiency hint."
+  (ecase (state state)
+    ((:header :initial) 1)
+    (:data (- (size state) (length (msg-data state))))
+    (:end-of-data 1)
+    (:complete 0)))
+
 (defun pump-element (stream state)
   (check-type state decoder-state)
   (ecase (state state)
