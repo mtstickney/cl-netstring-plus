@@ -27,11 +27,18 @@
                      (expected-size condition)
                      (found-char condition)))))
 
-(defun write-netstring-bytes (stream data)
-  (let ((stream (flexi-streams:make-flexi-stream stream :external-format '(:utf-8 :eol-style :lf))))
-    (format stream "~X:" (length data))
-    (loop for e across data
-       do (write-byte e stream))
+(defun write-netstring-bytes (stream &rest datae)
+  (write-netstring-bytes* stream datae))
+
+(defun write-netstring-bytes* (stream datae)
+  (let ((stream (flexi-streams:make-flexi-stream stream :external-format '(:utf-8 :eol-style :lf)))
+        (len (reduce #'+ datae :key #'length)))
+    (format stream "~X:" len)
+    (map nil (lambda (data)
+               (map nil (lambda (b)
+                          (write-byte b stream))
+                    data))
+         datae)
     (write-char #\Linefeed stream)))
 
 ;;; Decoding
@@ -185,9 +192,15 @@
       (error 'too-much-data :expected-size len :found c))
     seq))
 
-(defun netstring-bytes (data)
+(eval-when (:compile-toplevel :load-toplevel)
+  (defun netstring-bytes (&rest data)
+    (flexi-streams:with-output-to-sequence (byte-stream)
+      (write-netstring-bytes* byte-stream data))))
+
+(defun netstring-bytes* (datae)
+  "Return a netstring encoding for the concatenation of DATAE."
   (flexi-streams:with-output-to-sequence (byte-stream)
-    (write-netstring-bytes byte-stream data)))
+    (write-netstring-bytes* byte-stream datae)))
 
 (defun netstring-data (bytes)
   (flexi-streams:with-input-from-sequence (byte-stream bytes)
