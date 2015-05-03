@@ -35,9 +35,7 @@
         (len (reduce #'+ datae :key #'length)))
     (format stream "~X:" len)
     (map nil (lambda (data)
-               (map nil (lambda (b)
-                          (write-byte b stream))
-                    data))
+               (write-sequence data stream))
          datae)
     (write-char #\Linefeed stream)))
 
