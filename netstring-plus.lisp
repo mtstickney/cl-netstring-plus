@@ -48,6 +48,17 @@
     :size 0
     :data nil))
 
+(defmethod print-object ((object decoder-state) stream)
+  (print-unreadable-object (object stream :type t :identity t)
+    (format stream "State: ~S Data-size: ~A Message-data: ~A"
+            (state object)
+            (if (slot-boundp object 'data-size)
+                (size object)
+                "<unbound>")
+            (if (slot-boundp object 'message-data)
+                (format nil "~S" (msg-data object))
+                "<unbound>"))))
+
 (defun add-header-digit! (state n)
   (check-type state decoder-state)
   (check-type n (integer 0 15))
