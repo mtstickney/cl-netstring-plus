@@ -43,8 +43,17 @@
 
 ;;; Decoding
 
-(defun hex-digit-p (c)
-  (parse-integer (string c) :radix 16 :junk-allowed t))
+(defun ascii-hex-digit-p (code)
+  "Return T if CODE is the ASCII value for a hexadecimal digit, NIL otherwise."
+  (check-type code (unsigned-byte 8))
+  (cond
+    ((<= 48 code 57)
+     (- code 48))
+    ((<= 65 code 70)
+     (+ (- code 65) 10))
+    ((<= 97 code 102)
+     (+ (- code 97) 10))
+    (t nil)))
 
 (defclass decoder-state ()
   ((state :initarg :state :accessor state)
@@ -113,12 +122,13 @@
     (:end-of-data 1)
     (:complete 0)))
 
-(defun pump-element (stream state)
+(defun pump-byte! (state byte)
   (check-type state decoder-state)
   (ecase (state state)
     ((:header :initial)
-     (let* ((c (read-char stream))
-            (n (hex-digit-p c)))
+     ;; We're abusing the ASCII-UTF8 equivalence a bit here.
+     (let* ((c (code-char byte))
+            (n (ascii-hex-digit-p byte)))
        (cond
          ((eql c #\:) (cond
                         ;; If we've read an acceptable character,
@@ -133,64 +143,65 @@
             (when (eql (state state) :initial)
               (transition-state! state :header))))))
     (:data
-     (let ((byte (read-byte stream)))
-       (add-data-byte! state byte)
-       (when (= (length (msg-data state)) (size state))
-         (transition-state! state :end-of-data))))
+     (add-data-byte! state byte)
+     (when (= (length (msg-data state)) (size state))
+       (transition-state! state :end-of-data)))
     (:end-of-data
-     (let ((c (read-char stream)))
+     (let ((c (code-char byte)))
        (unless (eql c #\Linefeed)
-         (unread-char c stream)
          (error 'too-much-data :expected-size (size state) :found c))
        (transition-state! state :complete)))
     (:complete (error "Decoder ~S is complete, can't pump any more data." state))))
 
-(defun pump-data (stream state)
-  (let ((msgs '()))
+(defun pump-stream! (stream state &key count bytes)
+  (let ((msgs '())
+        (i 0)
+        (byte-count 0))
     (handler-case
         (loop
+           while (and (or (not bytes)
+                          (<= byte-count bytes))
+                      (or (not count)
+                          (< i count)))
+           do
            (loop until (eql (state state) :complete)
-              do (pump-element stream state)
-              finally (push (msg-data state) msgs))
+              do (let ((byte (read-byte stream)))
+                   (pump-byte! state byte)
+                   (incf byte-count))
+              finally (progn
+                        (push (msg-data state) msgs)
+                        (incf i)))
            (setf state (make-decoder-state)))
       (end-of-file ()
         ;; Just trap it
         ))
     (values state (nreverse msgs))))
 
-;; TODO: this relies on =stream= having :external-format :utf-8
-;; currently done in read-netstring-data, but eh....
-(defun read-hex-header (stream)
-  (let* (c
-         (header-str
-          (with-output-to-string
-            (header-stream)
-            (loop while (hex-digit-p (setf c (read-char stream)))
-               do (write-char c header-stream)
-               finally (unread-char c stream))))
-         (len (parse-integer header-str :radix 16))
-         (c nil))
-    (setf c (read-char stream))
-    (when (and (eql c #\:) (null len))
-      (error 'empty-header))
-    (when (not (eql c #\:))
-      (error 'invalid-header-char :char c))
-    len))
+(defun pump-vector! (vector state &key (start 0) end count)
+  (let ((msgs '())
+        (i 0)
+        (end (if end end (1- (length vector)))))
+    ;; TODO: It would be faster to check the element-type before the
+    ;; loop, but that might cause issues for vectors with valid elements
+    ;; but no specific element-type.
+    (loop while (and (<= start end)
+                     (or (not count)
+                         (< i count)))
+       do (let ((byte (elt vector start)))
+            (check-type byte (unsigned-byte 8))
+            (pump-byte! state byte)
+            (incf start)
+            (when (eql (state state) :complete)
+              (push (msg-data state) msgs)
+              (incf i)
+              (setf state (make-decoder-state)))))
+    (values state (nreverse msgs) start)))
 
 ;;; TODO: Add support for a resynchronizing restart to dump data until
 ;;; newline on error
 (defun read-netstring-data (stream)
-  (let* ((fstream (flexi-streams:make-flexi-stream stream :external-format '(:utf-8 :eol-style :lf)))
-         (len (read-hex-header fstream))
-         (seq (make-array len :element-type '(unsigned-byte 8)
-                          :fill-pointer 0))
-         c)
-    (loop for i from 1 to len
-       do (vector-push (read-byte fstream) seq))
-    (when (not (eql (setf c (read-char fstream))
-                   #\Linefeed))
-      (error 'too-much-data :expected-size len :found c))
-    seq))
+  (let ((state (make-decoder-state)))
+    (first (nth-value 0 (pump-stream! stream state :count 1)))))
 
 (eval-when (:compile-toplevel :load-toplevel)
   (defun netstring-bytes (&rest data)
@@ -203,17 +214,11 @@
     (write-netstring-bytes* byte-stream datae)))
 
 (defun netstring-data (bytes)
-  (flexi-streams:with-input-from-sequence (byte-stream bytes)
-    (read-netstring-data byte-stream)))
+  (let ((state (make-decoder-state)))
+    (first (nth-value 1 (pump-vector! bytes state :count 1)))))
 
 (defmacro data (sequence)
-  (let* ((len (length sequence))
-         (hex-header (trivial-utf-8:string-to-utf-8-bytes
-                      (format nil "~X:" len))))
-    (concatenate '(vector (unsigned-byte 8))
-                 hex-header
-                 sequence
-                 (trivial-utf-8:string-to-utf-8-bytes (format nil "~c" #\Linefeed)))))
+  (netstring-bytes sequence))
 
 (defmacro str (string)
   `(data ,(trivial-utf-8:string-to-utf-8-bytes string)))

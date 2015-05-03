@@ -7,7 +7,9 @@
            #:write-netstring-bytes*
            #:make-decoder-state
            #:next-read-size
-           #:pump-data
+           #:pump-byte!
+           #:pump-stream!
+           #:pump-vector!
            #:read-netstring-data
            #:netstring-data
            #:netstring-bytes
