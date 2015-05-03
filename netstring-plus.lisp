@@ -122,6 +122,7 @@
 
 (defun pump-byte! (state byte)
   (check-type state decoder-state)
+  (check-type byte (unsigned-byte 8))
   (ecase (state state)
     ((:header :initial)
      ;; We're abusing the ASCII-UTF8 equivalence a bit here.
