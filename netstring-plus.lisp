@@ -199,8 +199,11 @@
 ;;; TODO: Add support for a resynchronizing restart to dump data until
 ;;; newline on error
 (defun read-netstring-data (stream)
-  (let ((state (make-decoder-state)))
-    (first (nth-value 0 (pump-stream! stream state :count 1)))))
+  (let ((state (make-decoder-state))
+        (msgs (nth-value 1 (pump-stream! stream state :count 1))))
+    (when (endp msgs)
+      (error 'end-of-file :stream stream))
+    (first msgs)))
 
 (eval-when (:compile-toplevel :load-toplevel)
   (defun netstring-bytes (&rest data)
